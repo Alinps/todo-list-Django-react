@@ -15,6 +15,7 @@ function App() {
         <Route path="/" element={isAuthenticated ? <TodoList /> : <Navigate to="/login" />} />
         <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
         <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/" />} />
+        <Route path="/todo" element={<TodoList />} />
         <Route path="*" element={<h2 className="text-center mt-5">404 Page Not Found</h2>} />
       </Routes>
     </Router>
