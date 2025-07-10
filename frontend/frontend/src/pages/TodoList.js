@@ -2,178 +2,104 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE = 'http://localhost:8000/api';
-
-function TodoList() {
+const TodoList = () => {
   const [tasks, setTasks] = useState([]);
-  const [newTask, setNewTask] = useState('');
+  const [text, setText] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [editingText, setEditingText] = useState('');
+
   const navigate = useNavigate();
 
-  const token = localStorage.getItem('token');
+  // Set Auth token
+  const token = localStorage.getItem('access_token');
+  axios.defaults.headers.common['Authorization'] = token ? `Bearer ${token}` : '';
 
   useEffect(() => {
-    if (!token) return navigate('/login');
-    fetchTasks();
+    if (!token) {
+      navigate('/login');
+    } else {
+      fetchTasks();
+    }
   }, []);
 
   const fetchTasks = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/tasks/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setTasks(res.data);
-    } catch (err) {
-      console.error(err);
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/login');
-      }
+      const response = await axios.get('http://localhost:8000/api/tasks/');
+      setTasks(response.data);
+    } catch (error) {
+      console.error('Failed to fetch tasks:', error);
     }
   };
 
-  const addTask = async () => {
-    if (!newTask || !dueDate) return;
+  const handleAddTask = async () => {
+    if (!text || !dueDate) return;
     try {
-      await axios.post(
-        `${API_BASE}/tasks/`,
-        { text: newTask, date: dueDate },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setNewTask('');
+      if (editingId) {
+        await axios.put(`http://localhost:8000/api/tasks/${editingId}/`, { text, due_date: dueDate });
+        setEditingId(null);
+      } else {
+        await axios.post('http://localhost:8000/api/tasks/', { text, due_date: dueDate });
+      }
+      setText('');
       setDueDate('');
       fetchTasks();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error('Error saving task:', error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`http://localhost:8000/api/tasks/${id}/`);
+      fetchTasks();
+    } catch (error) {
+      console.error('Failed to delete:', error);
     }
   };
 
   const toggleComplete = async (id, completed) => {
     try {
-      await axios.patch(
-        `${API_BASE}/tasks/${id}/`,
-        { completed: !completed },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.patch(`http://localhost:8000/api/tasks/${id}/`, { completed: !completed });
       fetchTasks();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error('Failed to toggle:', error);
     }
   };
 
-  const startEditing = (task) => {
+  const handleEdit = (task) => {
+    setText(task.text);
+    setDueDate(task.due_date);
     setEditingId(task.id);
-    setEditingText(task.text);
-  };
-
-  const saveEdit = async () => {
-    try {
-      await axios.patch(
-        `${API_BASE}/tasks/${editingId}/`,
-        { text: editingText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setEditingId(null);
-      setEditingText('');
-      fetchTasks();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const deleteTask = async (id) => {
-    try {
-      await axios.delete(`${API_BASE}/tasks/${id}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      fetchTasks();
-    } catch (err) {
-      console.error(err);
-    }
   };
 
   return (
-    <div className="container mt-4">
-      <h2 className="mb-4">Your To-Do List</h2>
-
-      <div className="input-group mb-3">
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Task"
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-        />
-        <input
-          type="date"
-          className="form-control"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
-        <div className="input-group-append">
-          <button className="btn btn-primary" onClick={addTask}>
-            Add
-          </button>
-        </div>
+    <div className="container mt-5">
+      <h2 className="text-center">To-Do List</h2>
+      <div className="d-flex mb-3">
+        <input type="text" className="form-control mr-2" value={text} onChange={(e) => setText(e.target.value)} placeholder="Enter task" />
+        <input type="date" className="form-control mr-2" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        <button className="btn btn-primary" onClick={handleAddTask}>
+          {editingId ? 'Update' : 'Add'}
+        </button>
       </div>
-
       <ul className="list-group">
         {tasks.map((task) => (
-          <li
-            key={task.id}
-            className="list-group-item d-flex justify-content-between align-items-center"
-          >
+          <li key={task.id} className="list-group-item d-flex justify-content-between align-items-center">
             <div>
-              <input
-                type="checkbox"
-                checked={task.completed}
-                onChange={() => toggleComplete(task.id, task.completed)}
-                className="mr-2"
-              />
-              {editingId === task.id ? (
-                <input
-                  type="text"
-                  value={editingText}
-                  onChange={(e) => setEditingText(e.target.value)}
-                  onBlur={saveEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveEdit();
-                  }}
-                />
-              ) : (
-                <span
-                  style={{
-                    textDecoration: task.completed ? 'line-through' : 'none',
-                  }}
-                  onDoubleClick={() => startEditing(task)}
-                >
-                  {task.text} (Due: {formatDate(task.date)})
-                </span>
-              )}
+              <input type="checkbox" checked={task.completed} onChange={() => toggleComplete(task.id, task.completed)} className="mr-2" />
+              <span style={{ textDecoration: task.completed ? 'line-through' : 'none' }}>
+                {task.text} (Due: {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})
+              </span>
             </div>
-            <button
-              className="btn btn-sm btn-danger"
-              onClick={() => deleteTask(task.id)}
-            >
-              Delete
-            </button>
+            <div>
+              <button className="btn btn-sm btn-info mr-2" onClick={() => handleEdit(task)}>Edit</button>
+              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(task.id)}>Delete</button>
+            </div>
           </li>
         ))}
       </ul>
     </div>
   );
-}
-
-// 📆 Format date like "3 July 2025"
-function formatDate(dateStr) {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
+};
 
 export default TodoList;
